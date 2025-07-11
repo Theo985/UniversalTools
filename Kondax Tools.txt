@@ -1,0 +1,327 @@
+--// Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+--// Function to initialize the entire GUI and logic
+local function setup()
+	local char = player.Character or player.CharacterAdded:Wait()
+	local humanoid = char:WaitForChild("Humanoid")
+	local root = char:WaitForChild("HumanoidRootPart")
+
+	-- Destroy previous GUI if reloaded
+	local existing = player:FindFirstChild("PlayerGui"):FindFirstChild("FemboyUI")
+	if existing then existing:Destroy() end
+
+	--// GUI Setup
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "FemboyUI"
+	gui.ResetOnSpawn = false
+	gui.Parent = player:WaitForChild("PlayerGui")
+
+	local function makeRound(frame, radius)
+		local uicorner = Instance.new("UICorner")
+		uicorner.CornerRadius = UDim.new(0, radius)
+		uicorner.Parent = frame
+	end
+
+	local pink = Color3.fromRGB(255, 105, 180)
+	local lavender = Color3.fromRGB(216, 191, 216)
+	local backgroundColor = Color3.fromRGB(255, 240, 245)
+
+	-- Fenêtre principale
+	local mainFrame = Instance.new("Frame")
+	mainFrame.Size = UDim2.new(0, 360, 0, 400)
+	mainFrame.Position = UDim2.new(0.5, -180, 0.4, -200)
+	mainFrame.BackgroundColor3 = backgroundColor
+	mainFrame.BackgroundTransparency = 0.4
+	mainFrame.BorderSizePixel = 0
+	mainFrame.Parent = gui
+	makeRound(mainFrame, 18)
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = pink
+	stroke.Thickness = 3
+	stroke.Parent = mainFrame
+
+	local titleBar = Instance.new("Frame")
+	titleBar.Size = UDim2.new(1, 0, 0, 35)
+	titleBar.BackgroundColor3 = pink
+	titleBar.BackgroundTransparency = 0.15
+	titleBar.Parent = mainFrame
+	makeRound(titleBar, 18)
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Size = UDim2.new(1, -70, 1, 0)
+	titleLabel.Position = UDim2.new(0, 10, 0, 0)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Text = "Kondax Panel"
+	titleLabel.TextColor3 = Color3.fromRGB(80, 0, 100)
+	titleLabel.Font = Enum.Font.Fantasy
+	titleLabel.TextScaled = true
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Parent = titleBar
+
+	local closeBtn = Instance.new("TextButton")
+	closeBtn.Size = UDim2.new(0, 30, 0, 30)
+	closeBtn.Position = UDim2.new(1, -40, 0, 2)
+	closeBtn.Text = "✖"
+	closeBtn.BackgroundColor3 = pink
+	closeBtn.TextColor3 = Color3.new(1,1,1)
+	closeBtn.Font = Enum.Font.SourceSansBold
+	closeBtn.TextScaled = true
+	closeBtn.Parent = titleBar
+	makeRound(closeBtn, 8)
+
+	closeBtn.MouseButton1Click:Connect(function()
+		gui:Destroy()
+	end)
+
+	local minimizeBtn = Instance.new("TextButton")
+	minimizeBtn.Size = UDim2.new(0, 30, 0, 30)
+	minimizeBtn.Position = UDim2.new(1, -80, 0, 2)
+	minimizeBtn.Text = "━"
+	minimizeBtn.BackgroundColor3 = pink
+	minimizeBtn.TextColor3 = Color3.new(1,1,1)
+	minimizeBtn.Font = Enum.Font.SourceSansBold
+	minimizeBtn.TextScaled = true
+	minimizeBtn.Parent = titleBar
+	makeRound(minimizeBtn, 8)
+
+	local isMinimized = false
+	minimizeBtn.MouseButton1Click:Connect(function()
+		isMinimized = not isMinimized
+		mainFrame.Size = isMinimized and UDim2.new(0, 360, 0, 40) or UDim2.new(0, 360, 0, 400)
+		for _, child in pairs(mainFrame:GetChildren()) do
+			if child ~= titleBar and child:IsA("GuiObject") then
+				child.Visible = not isMinimized
+			end
+		end
+	end)
+
+	-- Draggable
+	local dragging, dragInput, dragStart, startPos
+	titleBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			dragStart = input.Position
+			startPos = mainFrame.Position
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+	titleBar.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			dragInput = input
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and input == dragInput then
+			local delta = input.Position - dragStart
+			mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+
+	-- ScrollFrame
+	local scrollFrame = Instance.new("ScrollingFrame")
+	scrollFrame.Size = UDim2.new(1, -20, 1, -50)
+	scrollFrame.Position = UDim2.new(0, 10, 0, 40)
+	scrollFrame.BackgroundTransparency = 1
+	scrollFrame.BorderSizePixel = 0
+	scrollFrame.CanvasSize = UDim2.new(0, 0, 1, 0)
+	scrollFrame.ScrollBarThickness = 8
+	scrollFrame.Parent = mainFrame
+
+	local function updateCanvasSize()
+		local contentHeight = 0
+		for _, child in pairs(scrollFrame:GetChildren()) do
+			if child:IsA("GuiObject") then
+				local bottom = child.Position.Y.Offset + child.AbsoluteSize.Y
+				contentHeight = math.max(contentHeight, bottom)
+			end
+		end
+		scrollFrame.CanvasSize = UDim2.new(0, 0, 0, contentHeight + 10)
+	end
+
+	local function styleButton(btn)
+		btn.BackgroundColor3 = pink
+		btn.TextColor3 = Color3.new(1,1,1)
+		btn.Font = Enum.Font.SourceSansBold
+		btn.TextScaled = true
+		btn.AutoButtonColor = true
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(255, 20, 147)
+		stroke.Thickness = 2
+		stroke.Parent = btn
+		makeRound(btn, 10)
+	end
+
+	-- Slider
+	local function makeSlider(name, min, max, default, y, callback)
+		local frame = Instance.new("Frame")
+		frame.Size = UDim2.new(0.9, 0, 0, 50)
+		frame.Position = UDim2.new(0.05, 0, 0, y)
+		frame.BackgroundTransparency = 1
+		frame.Parent = scrollFrame
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(0.5, 0, 0, 25)
+		label.Position = UDim2.new(0, 0, 0, 0)
+		label.BackgroundTransparency = 1
+		label.Text = name .. ": " .. tostring(default)
+		label.TextColor3 = pink
+		label.Font = Enum.Font.SourceSansBold
+		label.TextScaled = true
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Parent = frame
+
+		local sliderBG = Instance.new("Frame")
+		sliderBG.Size = UDim2.new(1, 0, 0, 15)
+		sliderBG.Position = UDim2.new(0, 0, 0, 30)
+		sliderBG.BackgroundColor3 = lavender
+		sliderBG.Parent = frame
+		makeRound(sliderBG, 7)
+
+		local sliderFill = Instance.new("Frame")
+		sliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+		sliderFill.BackgroundColor3 = pink
+		sliderFill.Parent = sliderBG
+		makeRound(sliderFill, 7)
+
+		local dragging = false
+		sliderBG.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+		end)
+		sliderBG.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+		end)
+		sliderBG.InputChanged:Connect(function(input)
+			if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+				local relativeX = math.clamp(input.Position.X - sliderBG.AbsolutePosition.X, 0, sliderBG.AbsoluteSize.X)
+				local percent = relativeX / sliderBG.AbsoluteSize.X
+				sliderFill.Size = UDim2.new(percent, 0, 1, 0)
+				local value = math.floor(min + (max - min) * percent)
+				label.Text = name .. ": " .. tostring(value)
+				callback(value)
+			end
+		end)
+	end
+
+	-- Logic
+	local flySpeed = 50
+	local flyOn, bodyVelocity, flyConnection = false
+	local noclipOn, noclipConnection = false
+	local espOn, espHighlights = false, {}
+
+	makeSlider("SpeedWalk", 16, 200, humanoid.WalkSpeed, 20, function(v) humanoid.WalkSpeed = v end)
+	makeSlider("JumpPower", 50, 200, humanoid.JumpPower, 80, function(v) humanoid.JumpPower = v end)
+	makeSlider("Fly Speed", 10, 200, flySpeed, 140, function(v) flySpeed = v end)
+
+	local noclipBtn = Instance.new("TextButton")
+	noclipBtn.Size = UDim2.new(0.9, 0, 0, 40)
+	noclipBtn.Position = UDim2.new(0.05, 0, 0, 210)
+	noclipBtn.Text = "Noclip: OFF"
+	styleButton(noclipBtn)
+	noclipBtn.Parent = scrollFrame
+
+	noclipBtn.MouseButton1Click:Connect(function()
+		noclipOn = not noclipOn
+		noclipBtn.Text = "Noclip: " .. (noclipOn and "ON" or "OFF")
+		if noclipOn then
+			noclipConnection = RunService.Stepped:Connect(function()
+				for _, part in pairs(char:GetChildren()) do
+					if part:IsA("BasePart") then part.CanCollide = false end
+				end
+			end)
+		else
+			if noclipConnection then noclipConnection:Disconnect() end
+			for _, part in pairs(char:GetChildren()) do
+				if part:IsA("BasePart") then part.CanCollide = true end
+			end
+		end
+	end)
+
+	local espBtn = Instance.new("TextButton")
+	espBtn.Size = UDim2.new(0.9, 0, 0, 40)
+	espBtn.Position = UDim2.new(0.05, 0, 0, 270)
+	espBtn.Text = "ESP: OFF"
+	styleButton(espBtn)
+	espBtn.Parent = scrollFrame
+
+	local function updateESP()
+		for _, h in pairs(espHighlights) do h:Destroy() end
+		espHighlights = {}
+		if not espOn then return end
+		for _, plr in pairs(Players:GetPlayers()) do
+			if plr ~= player and plr.Character then
+				local highlight = Instance.new("Highlight")
+				highlight.Adornee = plr.Character
+				highlight.FillColor = pink
+				highlight.OutlineColor = Color3.new(1,1,1)
+				highlight.Parent = plr.Character
+				espHighlights[plr] = highlight
+			end
+		end
+	end
+
+	espBtn.MouseButton1Click:Connect(function()
+		espOn = not espOn
+		espBtn.Text = "ESP: " .. (espOn and "ON" or "OFF")
+		updateESP()
+	end)
+
+	Players.PlayerAdded:Connect(updateESP)
+	Players.PlayerRemoving:Connect(updateESP)
+	RunService.Heartbeat:Connect(function()
+		if espOn then updateESP() end
+	end)
+
+	local flyBtn = Instance.new("TextButton")
+	flyBtn.Size = UDim2.new(0.9, 0, 0, 40)
+	flyBtn.Position = UDim2.new(0.05, 0, 0, 330)
+	flyBtn.Text = "Fly: OFF"
+	styleButton(flyBtn)
+	flyBtn.Parent = scrollFrame
+
+	flyBtn.MouseButton1Click:Connect(function()
+		flyOn = not flyOn
+		flyBtn.Text = "Fly: " .. (flyOn and "ON" or "OFF")
+		if flyOn then
+			bodyVelocity = Instance.new("BodyVelocity")
+			bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+			bodyVelocity.P = 1e4
+			bodyVelocity.Parent = root
+			flyConnection = RunService.Heartbeat:Connect(function()
+				if not flyOn then return end
+				local direction = Vector3.zero
+				if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction += root.CFrame.LookVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction -= root.CFrame.LookVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction -= root.CFrame.RightVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction += root.CFrame.RightVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.new(0,1,0) end
+				if UserInputService:IsKeyDown(Enum.KeyCode.Q) then direction -= Vector3.new(0,1,0) end
+				bodyVelocity.Velocity = direction.Magnitude > 0 and direction.Unit * flySpeed or Vector3.zero
+			end)
+		else
+			if bodyVelocity then bodyVelocity:Destroy() end
+			if flyConnection then flyConnection:Disconnect() end
+		end
+	end)
+
+	updateCanvasSize()
+end
+
+-- Initial launch
+setup()
+
+-- When player respawns
+player.CharacterAdded:Connect(function()
+	task.wait(1)
+	setup()
+end)
