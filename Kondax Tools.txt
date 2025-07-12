@@ -1,39 +1,135 @@
---// Services
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+
 local player = Players.LocalPlayer
+local gui
 
---// Function to initialize the entire GUI and logic
-local function setup()
-	local char = player.Character or player.CharacterAdded:Wait()
-	local humanoid = char:WaitForChild("Humanoid")
-	local root = char:WaitForChild("HumanoidRootPart")
+local pink = Color3.fromRGB(255, 105, 180)
+local lavender = Color3.fromRGB(216, 191, 216)
+local backgroundColor = Color3.fromRGB(255, 240, 245)
 
-	-- Destroy previous GUI if reloaded
-	local existing = player:FindFirstChild("PlayerGui"):FindFirstChild("FemboyUI")
-	if existing then existing:Destroy() end
+local flySpeed = 50
+local flyOn = false
+local bodyVelocity
+local flyConnection
 
-	--// GUI Setup
-	local gui = Instance.new("ScreenGui")
+local noclipOn = false
+local noclipConnection
+
+local espOn = false
+local espHighlights = {}
+
+-- Fonctions auxiliaires pour GUI etc
+local function makeRound(frame, radius)
+	local uicorner = Instance.new("UICorner")
+	uicorner.CornerRadius = UDim.new(0, radius)
+	uicorner.Parent = frame
+end
+
+local function styleButton(btn)
+	btn.BackgroundColor3 = pink
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextScaled = true
+	btn.AutoButtonColor = true
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 20, 147)
+	stroke.Thickness = 2
+	stroke.Parent = btn
+	makeRound(btn, 10)
+end
+
+local function clearESP()
+	for _, h in pairs(espHighlights) do
+		h:Destroy()
+	end
+	espHighlights = {}
+end
+
+local function updateESP()
+	clearESP()
+	if not espOn then return end
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= player and plr.Character then
+			local highlight = Instance.new("Highlight")
+			highlight.Adornee = plr.Character
+			highlight.FillColor = pink
+			highlight.OutlineColor = Color3.new(1,1,1)
+			highlight.Parent = plr.Character
+			espHighlights[plr] = highlight
+		end
+	end
+end
+
+local function setupCharacter(character)
+	local root = character:WaitForChild("HumanoidRootPart")
+
+	-- Réinitialiser noclip
+	if noclipOn then
+		if noclipConnection then noclipConnection:Disconnect() end
+		noclipConnection = RunService.Stepped:Connect(function()
+			for _, part in pairs(character:GetChildren()) do
+				if part:IsA("BasePart") then part.CanCollide = false end
+			end
+		end)
+	else
+		if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end
+		for _, part in pairs(character:GetChildren()) do
+			if part:IsA("BasePart") then part.CanCollide = true end
+		end
+	end
+
+	-- Réinitialiser fly
+	if flyOn then
+		if bodyVelocity then bodyVelocity:Destroy() end
+		bodyVelocity = Instance.new("BodyVelocity")
+		bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+		bodyVelocity.P = 1e4
+		bodyVelocity.Parent = root
+
+		if flyConnection then flyConnection:Disconnect() end
+		flyConnection = RunService.Heartbeat:Connect(function()
+			if not flyOn then return end
+			local direction = Vector3.zero
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction += root.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction -= root.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction -= root.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction += root.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.new(0,1,0) end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Q) then direction -= Vector3.new(0,1,0) end
+			bodyVelocity.Velocity = direction.Magnitude > 0 and direction.Unit * flySpeed or Vector3.zero
+		end)
+	else
+		if bodyVelocity then
+			bodyVelocity:Destroy()
+			bodyVelocity = nil
+		end
+		if flyConnection then
+			flyConnection:Disconnect()
+			flyConnection = nil
+		end
+	end
+
+	-- Met à jour ESP
+	updateESP()
+end
+
+local function createGUI()
+	if gui then
+		gui:Destroy()
+		gui = nil
+	end
+
+	gui = Instance.new("ScreenGui")
 	gui.Name = "FemboyUI"
 	gui.ResetOnSpawn = false
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	local function makeRound(frame, radius)
-		local uicorner = Instance.new("UICorner")
-		uicorner.CornerRadius = UDim.new(0, radius)
-		uicorner.Parent = frame
-	end
-
-	local pink = Color3.fromRGB(255, 105, 180)
-	local lavender = Color3.fromRGB(216, 191, 216)
-	local backgroundColor = Color3.fromRGB(255, 240, 245)
-
-	-- Fenêtre principale
 	local mainFrame = Instance.new("Frame")
-	mainFrame.Size = UDim2.new(0, 360, 0, 400)
-	mainFrame.Position = UDim2.new(0.5, -180, 0.4, -200)
+	mainFrame.Size = UDim2.new(0, 360, 0, 500)
+	mainFrame.Position = UDim2.new(0.5, -180, 0.4, -250)
 	mainFrame.BackgroundColor3 = backgroundColor
 	mainFrame.BackgroundTransparency = 0.4
 	mainFrame.BorderSizePixel = 0
@@ -76,6 +172,7 @@ local function setup()
 
 	closeBtn.MouseButton1Click:Connect(function()
 		gui:Destroy()
+		gui = nil
 	end)
 
 	local minimizeBtn = Instance.new("TextButton")
@@ -92,7 +189,7 @@ local function setup()
 	local isMinimized = false
 	minimizeBtn.MouseButton1Click:Connect(function()
 		isMinimized = not isMinimized
-		mainFrame.Size = isMinimized and UDim2.new(0, 360, 0, 40) or UDim2.new(0, 360, 0, 400)
+		mainFrame.Size = isMinimized and UDim2.new(0, 360, 0, 40) or UDim2.new(0, 360, 0, 500)
 		for _, child in pairs(mainFrame:GetChildren()) do
 			if child ~= titleBar and child:IsA("GuiObject") then
 				child.Visible = not isMinimized
@@ -100,34 +197,6 @@ local function setup()
 		end
 	end)
 
-	-- Draggable
-	local dragging, dragInput, dragStart, startPos
-	titleBar.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			dragging = true
-			dragStart = input.Position
-			startPos = mainFrame.Position
-
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-				end
-			end)
-		end
-	end)
-	titleBar.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			dragInput = input
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(input)
-		if dragging and input == dragInput then
-			local delta = input.Position - dragStart
-			mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-		end
-	end)
-
-	-- ScrollFrame
 	local scrollFrame = Instance.new("ScrollingFrame")
 	scrollFrame.Size = UDim2.new(1, -20, 1, -50)
 	scrollFrame.Position = UDim2.new(0, 10, 0, 40)
@@ -148,21 +217,11 @@ local function setup()
 		scrollFrame.CanvasSize = UDim2.new(0, 0, 0, contentHeight + 10)
 	end
 
-	local function styleButton(btn)
-		btn.BackgroundColor3 = pink
-		btn.TextColor3 = Color3.new(1,1,1)
-		btn.Font = Enum.Font.SourceSansBold
-		btn.TextScaled = true
-		btn.AutoButtonColor = true
+	local humanoid = player.Character and player.Character:FindFirstChild("Humanoid") or nil
 
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(255, 20, 147)
-		stroke.Thickness = 2
-		stroke.Parent = btn
-		makeRound(btn, 10)
-	end
+	local speedValue = humanoid and humanoid.WalkSpeed or 16
+	local jumpValue = humanoid and humanoid.JumpPower or 50
 
-	-- Slider
 	local function makeSlider(name, min, max, default, y, callback)
 		local frame = Instance.new("Frame")
 		frame.Size = UDim2.new(0.9, 0, 0, 50)
@@ -213,15 +272,23 @@ local function setup()
 		end)
 	end
 
-	-- Logic
-	local flySpeed = 50
-	local flyOn, bodyVelocity, flyConnection = false
-	local noclipOn, noclipConnection = false
-	local espOn, espHighlights = false, {}
+	makeSlider("SpeedWalk", 16, 200, speedValue, 20, function(v)
+		local c = player.Character
+		if c and c:FindFirstChild("Humanoid") then
+			c.Humanoid.WalkSpeed = v
+		end
+	end)
 
-	makeSlider("SpeedWalk", 16, 200, humanoid.WalkSpeed, 20, function(v) humanoid.WalkSpeed = v end)
-	makeSlider("JumpPower", 50, 200, humanoid.JumpPower, 80, function(v) humanoid.JumpPower = v end)
-	makeSlider("Fly Speed", 10, 200, flySpeed, 140, function(v) flySpeed = v end)
+	makeSlider("JumpPower", 50, 200, jumpValue, 80, function(v)
+		local c = player.Character
+		if c and c:FindFirstChild("Humanoid") then
+			c.Humanoid.JumpPower = v
+		end
+	end)
+
+	makeSlider("Fly Speed", 10, 200, flySpeed, 140, function(v)
+		flySpeed = v
+	end)
 
 	local noclipBtn = Instance.new("TextButton")
 	noclipBtn.Size = UDim2.new(0.9, 0, 0, 40)
@@ -233,15 +300,19 @@ local function setup()
 	noclipBtn.MouseButton1Click:Connect(function()
 		noclipOn = not noclipOn
 		noclipBtn.Text = "Noclip: " .. (noclipOn and "ON" or "OFF")
+		local character = player.Character
+		if not character then return end
+
 		if noclipOn then
+			if noclipConnection then noclipConnection:Disconnect() end
 			noclipConnection = RunService.Stepped:Connect(function()
-				for _, part in pairs(char:GetChildren()) do
+				for _, part in pairs(character:GetChildren()) do
 					if part:IsA("BasePart") then part.CanCollide = false end
 				end
 			end)
 		else
-			if noclipConnection then noclipConnection:Disconnect() end
-			for _, part in pairs(char:GetChildren()) do
+			if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end
+			for _, part in pairs(character:GetChildren()) do
 				if part:IsA("BasePart") then part.CanCollide = true end
 			end
 		end
@@ -249,26 +320,10 @@ local function setup()
 
 	local espBtn = Instance.new("TextButton")
 	espBtn.Size = UDim2.new(0.9, 0, 0, 40)
-	espBtn.Position = UDim2.new(0.05, 0, 0, 270)
+	espBtn.Position = UDim2.new(0.05, 0, 0, 260)
 	espBtn.Text = "ESP: OFF"
 	styleButton(espBtn)
 	espBtn.Parent = scrollFrame
-
-	local function updateESP()
-		for _, h in pairs(espHighlights) do h:Destroy() end
-		espHighlights = {}
-		if not espOn then return end
-		for _, plr in pairs(Players:GetPlayers()) do
-			if plr ~= player and plr.Character then
-				local highlight = Instance.new("Highlight")
-				highlight.Adornee = plr.Character
-				highlight.FillColor = pink
-				highlight.OutlineColor = Color3.new(1,1,1)
-				highlight.Parent = plr.Character
-				espHighlights[plr] = highlight
-			end
-		end
-	end
 
 	espBtn.MouseButton1Click:Connect(function()
 		espOn = not espOn
@@ -276,15 +331,9 @@ local function setup()
 		updateESP()
 	end)
 
-	Players.PlayerAdded:Connect(updateESP)
-	Players.PlayerRemoving:Connect(updateESP)
-	RunService.Heartbeat:Connect(function()
-		if espOn then updateESP() end
-	end)
-
 	local flyBtn = Instance.new("TextButton")
 	flyBtn.Size = UDim2.new(0.9, 0, 0, 40)
-	flyBtn.Position = UDim2.new(0.05, 0, 0, 330)
+	flyBtn.Position = UDim2.new(0.05, 0, 0, 310)
 	flyBtn.Text = "Fly: OFF"
 	styleButton(flyBtn)
 	flyBtn.Parent = scrollFrame
@@ -292,11 +341,18 @@ local function setup()
 	flyBtn.MouseButton1Click:Connect(function()
 		flyOn = not flyOn
 		flyBtn.Text = "Fly: " .. (flyOn and "ON" or "OFF")
+		local character = player.Character
+		if not character then return end
+
+		local root = character:FindFirstChild("HumanoidRootPart")
 		if flyOn then
+			if bodyVelocity then bodyVelocity:Destroy() end
 			bodyVelocity = Instance.new("BodyVelocity")
 			bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
 			bodyVelocity.P = 1e4
 			bodyVelocity.Parent = root
+
+			if flyConnection then flyConnection:Disconnect() end
 			flyConnection = RunService.Heartbeat:Connect(function()
 				if not flyOn then return end
 				local direction = Vector3.zero
@@ -309,19 +365,57 @@ local function setup()
 				bodyVelocity.Velocity = direction.Magnitude > 0 and direction.Unit * flySpeed or Vector3.zero
 			end)
 		else
-			if bodyVelocity then bodyVelocity:Destroy() end
-			if flyConnection then flyConnection:Disconnect() end
+			if bodyVelocity then
+				bodyVelocity:Destroy()
+				bodyVelocity = nil
+			end
+			if flyConnection then
+				flyConnection:Disconnect()
+				flyConnection = nil
+			end
+		end
+	end)
+
+	local jerkToolsBtn = Instance.new("TextButton")
+	jerkToolsBtn.Size = UDim2.new(0.9, 0, 0, 40)
+	jerkToolsBtn.Position = UDim2.new(0.05, 0, 0, 360)
+	jerkToolsBtn.Text = "Jerk Tools"
+	styleButton(jerkToolsBtn)
+	jerkToolsBtn.Parent = scrollFrame
+
+	jerkToolsBtn.MouseButton1Click:Connect(function()
+		local url = "https://pastefy.app/YZoglOyJ/raw"
+		local success, result = pcall(function()
+			return game:HttpGet(url)
+		end)
+		if success and result then
+			local func, err = loadstring(result)
+			if func then
+				func()
+			else
+				warn("Erreur dans le loadstring :", err)
+			end
+		else
+			warn("Impossible de récupérer le script :", result)
 		end
 	end)
 
 	updateCanvasSize()
 end
 
--- Initial launch
-setup()
+local function onCharacterAdded(character)
+	wait(1)
+	setupCharacter(character)
+end
 
--- When player respawns
-player.CharacterAdded:Connect(function()
-	task.wait(1)
-	setup()
-end)
+local function setup()
+	createGUI()
+
+	if player.Character then
+		setupCharacter(player.Character)
+	end
+
+	player.CharacterAdded:Connect(onCharacterAdded)
+end
+
+setup()
